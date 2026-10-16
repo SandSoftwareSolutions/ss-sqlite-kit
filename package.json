@@ -1,0 +1,43 @@
+{
+  "name": "@sandsoftwaresolutions/sqlite-kit",
+  "version": "0.1.0",
+  "description": "Safe defaults, migrations, transactions and verified backups for node:sqlite. No dependencies.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "sqlite",
+    "node:sqlite",
+    "migrations",
+    "backup"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SandSoftwareSolutions/ss-sqlite-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SandSoftwareSolutions/ss-sqlite-kit/issues"
+  },
+  "homepage": "https://github.com/SandSoftwareSolutions/ss-sqlite-kit#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
