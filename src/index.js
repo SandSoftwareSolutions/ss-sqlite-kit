@@ -3,6 +3,24 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 const PRAGMA_NAME = /^[a-z_]+$/;
+const BUSY = /database is locked|database table is locked|busy/i;
+
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// Some statements (the first switch to WAL on a new file, for one) fail at once with "database is locked" when another process is
+// opening the same file at the same moment, without waiting for the busy timeout. Those are tried again for a few seconds.
+function execWhenFree(db, sql, timeoutMs = 5000) {
+  const until = Date.now() + timeoutMs;
+  for (let wait = 5; ; wait = Math.min(wait * 2, 100)) {
+    try {
+      db.exec(sql);
+      return;
+    } catch (error) {
+      if (!BUSY.test(String(error?.message)) || Date.now() >= until) throw error;
+      sleep(wait);
+    }
+  }
+}
 const PRAGMA_VALUE = /^[A-Za-z0-9_]+$/;
 
 /**
@@ -16,7 +34,7 @@ export function openDatabase(path, { migrations = [], pragmas = {}, readonly = f
     db.exec("PRAGMA foreign_keys = ON");
     db.exec("PRAGMA busy_timeout = 5000");
     if (!readonly && path !== ":memory:") {
-      db.exec("PRAGMA journal_mode = WAL");
+      execWhenFree(db, "PRAGMA journal_mode = WAL");
       db.exec("PRAGMA synchronous = NORMAL");
     }
     for (const [name, value] of Object.entries(pragmas)) {
@@ -66,11 +84,18 @@ export function migrate(db, migrations) {
       continue;
     }
     pending = true;
-    transaction(db, () => {
+    const ran = transaction(db, () => {
+      // Look again now that we hold the write lock: another process that started at the same moment may have applied it just now.
+      const row = db.prepare("SELECT checksum FROM _migrations WHERE id = ?").get(m.id);
+      if (row) {
+        if (row.checksum !== sum) throw new Error(`migrate: migration "${m.id}" was changed after it was applied; write a new migration instead`);
+        return false;
+      }
       db.exec(m.sql);
       db.prepare("INSERT INTO _migrations (id, checksum, applied_at) VALUES (?, ?, ?)").run(m.id, sum, new Date().toISOString());
+      return true;
     });
-    done.push(m.id);
+    if (ran) done.push(m.id);
   }
   return done;
 }
@@ -97,7 +122,18 @@ export function transaction(db, fn) {
     }
     throw error;
   }
-  db.exec(nested ? `RELEASE ${name}` : "COMMIT");
+  try {
+    db.exec(nested ? `RELEASE ${name}` : "COMMIT");
+  } catch (error) {
+    // A commit can fail (a deferred foreign key, a busy database). The transaction is then still open, and everything after it
+    // would silently run inside it and never be saved, so it is rolled back here.
+    try {
+      db.exec(nested ? `ROLLBACK TO ${name}; RELEASE ${name}` : "ROLLBACK");
+    } catch {
+      // The original error matters more than a failed rollback.
+    }
+    throw error;
+  }
   return result;
 }
 
