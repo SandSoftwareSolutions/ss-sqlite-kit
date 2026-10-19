@@ -88,7 +88,7 @@ test("backup writes a verified copy and never overwrites", () => {
   db.prepare("INSERT INTO users (name) VALUES ('kaj')").run();
   const copy = backup(db, join(dir, "copy.sqlite"));
   assert.ok(existsSync(copy));
-  assert.throws(() => backup(db, copy), /already exists/);
+  assert.throws(() => backup(db, copy), /already exists; choose a new file name/);
   const restored = openDatabase(copy, { readonly: true });
   assert.equal(restored.prepare("SELECT name FROM users").get().name, "kaj");
   restored.close();
