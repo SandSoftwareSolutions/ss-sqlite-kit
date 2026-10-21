@@ -10,6 +10,8 @@ The things you set up in every project that uses SQLite, in one small package on
 npm install @sandsoftwaresolutions/sqlite-kit
 ```
 
+Works with `import` and `require()`, and ships TypeScript types for both.
+
 ## Usage
 
 ```js
